@@ -1,5 +1,5 @@
-import type { RecordEntry, Sample, Summary } from './types';
-export function summarize(samples: Sample[]): Summary {
+import type { ProbeResult, RecordEntry, Sample, Summary } from './types';
+export function summarize(samples: ProbeResult[]): Summary {
   const values = samples.filter(s => s.status === 'success' && Number.isFinite(s.durationMs) && s.durationMs! >= 0)
     .map(s => s.durationMs!).sort((a, b) => a - b);
   const success = values.length;
@@ -15,8 +15,11 @@ export function summarize(samples: Sample[]): Summary {
   };
 }
 export function actualInterfaces(samples: Sample[]) {
-  return [...new Set(samples.map(s => s.interface === 'other' || s.interface === 'none'
+  return [...new Set(samples.flatMap(s => s.https ? [s, s.https] : [s]).map(s => s.interface === 'other' || s.interface === 'none'
     ? s.observedInterface ?? s.interface : s.interface))];
+}
+export function summarizeHTTPS(samples: Sample[]): Summary {
+  return summarize(samples.flatMap(s => s.https ? [s.https] : []));
 }
 export function lineMatches(record: RecordEntry, kind: 'wifi' | 'cellular') {
   // Only single-interface, complete sessions are comparable. A label never overrides native evidence.

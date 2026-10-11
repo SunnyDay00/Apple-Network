@@ -1,5 +1,5 @@
-import { actualInterfaces, summarize } from './statistics';
-import type { HTTPMetrics, Interface, RecordEntry, Sample, Target } from './types';
+import { actualInterfaces, summarize, summarizeHTTPS } from './statistics';
+import type { HTTPMetrics, Interface, NetworkRound, ProbeResult, RecordEntry, Sample, Target } from './types';
 const interfaces = ['wifi', 'cellular', 'wired', 'other', 'none'];
 const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0;
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -29,8 +29,8 @@ function metric(value: unknown): HTTPMetrics {
   if (typeof value.localAddress !== 'string' || typeof value.remoteAddress !== 'string') throw new Error('地址格式无效。');
   return value as unknown as HTTPMetrics;
 }
-function sample(value: unknown, index: number): Sample {
-  if (!isObject(value) || value.sequence !== index + 1 || typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at)) ||
+function probeResult(value: unknown): ProbeResult {
+  if (!isObject(value) ||
     !['success', 'failed', 'timeout', 'cancelled'].includes(String(value.status)) || !finite(value.elapsedMs) ||
     !interfaces.includes(String(value.interface)) || typeof value.dnsIncluded !== 'boolean' ||
     (value.status === 'success' && !finite(value.durationMs))) throw new Error('原始采样格式无效。');
@@ -41,7 +41,17 @@ function sample(value: unknown, index: number): Sample {
     if (!Array.isArray(value.metrics) || value.metrics.length > 6) throw new Error('HTTPS 事务数量无效。');
     value.metrics = value.metrics.map(metric);
   }
-  return value as unknown as Sample;
+  const clean: Record<string, unknown> = {};
+  for (const key of ['status', 'durationMs', 'elapsedMs', 'interface', 'observedInterface', 'dnsIncluded', 'error', 'statusCode', 'redirects', 'metrics'])
+    if (value[key] !== undefined) clean[key] = value[key];
+  return clean as unknown as ProbeResult;
+}
+function sample(value: unknown, index: number): Sample {
+  if (!isObject(value) || value.sequence !== index + 1 || typeof value.at !== 'string' || !Number.isFinite(Date.parse(value.at)))
+    throw new Error('原始采样序号或时间无效。');
+  const result = probeResult(value);
+  return { ...result, sequence: index + 1, at: value.at,
+    ...(value.https !== undefined ? { https: probeResult(value.https) } : {}) };
 }
 export function validateRecord(value: unknown): RecordEntry {
   if (!isObject(value) || typeof value.id !== 'string' || !value.id || value.id.length > 100 ||
@@ -49,18 +59,42 @@ export function validateRecord(value: unknown): RecordEntry {
     typeof value.startedAt !== 'string' || typeof value.endedAt !== 'string' ||
     !Number.isFinite(Date.parse(value.startedAt)) || !Number.isFinite(Date.parse(value.endedAt)) ||
     Date.parse(value.endedAt) < Date.parse(value.startedAt) ||
-    !['tcp', 'https'].includes(String(value.mode)) || !['auto', 'wifi', '5g'].includes(String(value.label)) ||
+    !['tcp', 'https', 'combined'].includes(String(value.mode)) || !['auto', 'wifi', '5g'].includes(String(value.label)) ||
     !['complete', 'stopped', 'interrupted'].includes(String(value.completion)) ||
     !isObject(value.target) || typeof value.target.id !== 'string' || typeof value.target.name !== 'string' ||
     typeof value.target.host !== 'string' || typeof value.target.port !== 'number' ||
     !isObject(value.parameters) || ![1, 5, 10, 20, 50, 100].includes(Number(value.parameters.count)) ||
     ![1, 2, 3, 5].includes(Number(value.parameters.interval)) || ![2, 3, 5, 10].includes(Number(value.parameters.timeout)) ||
-    !Array.isArray(value.samples) || value.samples.length > Number(value.parameters.count)) throw new Error('历史记录结构或参数无效。');
+    (value.scope !== undefined && !['current', 'both'].includes(String(value.scope))) ||
+    !Array.isArray(value.samples) || value.samples.length > Number(value.parameters.count) * (value.scope === 'both' ? 2 : 1)) throw new Error('历史记录结构或参数无效。');
   const samples = value.samples.map(sample);
-  if (value.completion === 'complete' && (samples.length !== value.parameters.count || samples.some(s => s.status === 'cancelled')))
+  const perRoundCount = Number(value.parameters.count);
+  const expectedCount = perRoundCount * (value.scope === 'both' ? 2 : 1);
+  if (value.completion === 'complete' && (samples.length !== expectedCount || samples.some(s => s.status === 'cancelled' ||
+    (value.mode === 'combined' && (!s.https || s.https.status === 'cancelled')))))
     throw new Error('完整记录的采样数量或状态无效。');
+  let rounds: NetworkRound[] | undefined;
+  if (value.rounds !== undefined) {
+    if (!Array.isArray(value.rounds) || value.rounds.length > (value.scope === 'both' ? 2 : 1)) throw new Error('线路轮次格式无效。');
+    rounds = value.rounds.map(r => {
+      if (!isObject(r) || !interfaces.includes(String(r.interface)) || !Array.isArray(r.samples) ||
+          r.samples.length > perRoundCount || typeof r.startedAt !== 'string' || typeof r.endedAt !== 'string' ||
+          !Number.isFinite(Date.parse(r.startedAt)) || !Number.isFinite(Date.parse(r.endedAt)) ||
+          !['complete','stopped','interrupted'].includes(String(r.completion))) throw new Error('线路采样格式无效。');
+      const entries = r.samples.map(sample);
+      if (r.completion === 'complete' && (entries.length !== perRoundCount || entries.some(s => !s.https || s.status === 'cancelled' || s.https.status === 'cancelled')))
+        throw new Error('完整线路轮次的采样不足或已取消。');
+      return { ...r, samples: entries, summary: summarize(entries), httpsSummary: summarizeHTTPS(entries) } as unknown as NetworkRound;
+    });
+    const flattened = rounds.flatMap(r => r.samples).map((s, index) => ({...s, sequence: index + 1}));
+    if (JSON.stringify(flattened) !== JSON.stringify(samples)) throw new Error('线路明细与原始采样不一致。');
+    if (value.scope === 'both' && rounds.length === 2 && !(['wifi','cellular'].every(i => rounds!.some(r => r.interface === i))))
+      throw new Error('双线路记录需要 Wi-Fi 与蜂窝各一轮。');
+    if (value.completion === 'complete' && rounds.some(r => r.completion !== 'complete')) throw new Error('完整记录包含未完成的线路轮次。');
+  }
   return { ...value, target: validateTarget(value.target as unknown as Target), samples,
-    summary: summarize(samples), actualInterfaces: actualInterfaces(samples) as Interface[] } as unknown as RecordEntry;
+    summary: summarize(samples), ...(value.mode === 'combined' ? { httpsSummary: summarizeHTTPS(samples) } : {}),
+    ...(rounds ? {rounds} : {}), actualInterfaces: actualInterfaces(samples) as Interface[] } as unknown as RecordEntry;
 }
 export function parseBackup(text: string): RecordEntry[] {
   if (text.length > 10 * 1024 * 1024) throw new Error('JSON 超过 10 MB，请拆分后导入。');

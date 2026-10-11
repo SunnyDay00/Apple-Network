@@ -9,12 +9,14 @@ function csvCell(value: unknown) {
   return `"${text.replaceAll('"', '""')}"`;
 }
 export function toCSV(records: RecordEntry[]) {
-  const rows: unknown[][] = [['记录ID', '记录名称', '开始时间', '域名', '端口', '模式', '线路标记', '记录状态', '序号', '时间', '连接实际网络', '路径监视网络', '状态', '耗时ms', '等待耗时ms', '错误', 'HTTP状态码', 'DNSms', 'TCPms', 'TLSms', 'TTFBms', '协议', '复用', '缓存']];
+  const rows: unknown[][] = [['记录ID', '记录名称', '开始时间', '域名', '端口', '模式', '线路标记', '记录状态', '序号', '时间', '连接实际网络', '路径监视网络', '状态', '耗时ms', '等待耗时ms', '错误', 'HTTP状态码', 'DNSms', 'TCPms', 'TLSms', 'TTFBms', '协议', '复用', '缓存', 'HTTPS状态', 'HTTPS总耗时ms', 'HTTPS等待ms', 'HTTPS错误', 'HTTPS实际网络', 'HTTPS路径监视网络']];
   for (const r of records) for (const s of r.samples) {
-    const m = s.metrics?.at(-1);
+    const h = s.https;
+    const m = (h ?? s).metrics?.at(-1);
     rows.push([r.id, r.name ?? r.target.name, r.startedAt, r.target.host, r.target.port, r.mode, r.label, r.completion,
       s.sequence, s.at, s.interface, s.observedInterface, s.status, s.durationMs, s.elapsedMs,
-      s.error, s.statusCode, m?.dnsMs, m?.tcpMs, m?.tlsMs, m?.ttfbMs, m?.protocol, m?.reused, m?.cached]);
+      s.error, (h ?? s).statusCode, m?.dnsMs, m?.tcpMs, m?.tlsMs, m?.ttfbMs, m?.protocol, m?.reused, m?.cached,
+      h?.status, h?.durationMs, h?.elapsedMs, h?.error, h?.interface, h?.observedInterface]);
   }
   return '\uFEFF' + rows.map(row => row.map(csvCell).join(',')).join('\r\n');
 }

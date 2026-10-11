@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { formatMs } from './statistics';
-import { interfaceNames, type Sample, type Summary } from './types';
+import { comparisonConclusion, formatMs } from './statistics';
+import { interfaceNames, type NetworkRound, type Sample, type Summary } from './types';
 
 export function Icon({ name, size = 22 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
@@ -35,12 +35,33 @@ export function Stats({ summary }: { summary: Summary }) {
     <div><span>连接失败率</span><strong className={summary.failed ? 'danger-text' : ''}>{summary.failureRate == null ? '不可用' : `${(summary.failureRate * 100).toFixed(1)}%`}</strong></div></div>
     <div className="counts"><span><i className="dot green" />成功 <b>{summary.success}</b></span><span><i className="dot red" />失败 <b>{summary.failed}</b></span><span>取消 <b>{summary.cancelled}</b></span></div></>;
 }
+export function RoundComparison({rounds, compact = false}: {rounds: NetworkRound[]; compact?: boolean}) {
+  const wifi = rounds.find(r => r.interface === 'wifi'), cell = rounds.find(r => r.interface === 'cellular');
+  if (!wifi || !cell) return null;
+  const complete = wifi.completion === 'complete' && cell.completion === 'complete';
+  const lowest = !complete || wifi.summary.mean === null || cell.summary.mean === null ? null
+    : wifi.summary.mean === cell.summary.mean ? '两条线路 TCP 平均耗时相同'
+    : wifi.summary.mean < cell.summary.mean ? '本组 Wi-Fi 的 TCP 平均耗时较低' : '本组蜂窝网络的 TCP 平均耗时较低';
+  return <section className={`round-comparison ${compact ? 'compact' : ''}`}>
+    <h3>同一组 Wi-Fi / 蜂窝测量</h3><div className="round-cards">{[wifi, cell].map(round => <div key={round.interface}>
+      <b><Icon name={round.interface === 'wifi' ? 'wifi' : 'cellular'} size={18} />{interfaceNames[round.interface]}{round.completion !== 'complete' && ' · 未完成'}</b>
+      <span>TCP 平均<strong>{formatMs(round.summary.mean)} <small>ms</small></strong></span>
+      <span>HTTPS 平均<strong>{formatMs(round.httpsSummary.mean)} <small>ms</small></strong></span>
+      <p>P95 {formatMs(round.summary.p95)} ms · 波动 {formatMs(round.summary.stddev)} ms</p>
+      <p>TCP 失败率 {round.summary.failureRate === null ? '不可用' : `${(round.summary.failureRate * 100).toFixed(1)}%`}</p>
+    </div>)}</div>
+    {lowest && <p className="round-lowest">{lowest}</p>}
+    {!compact && <p className="hint">{complete ? comparisonConclusion(wifi.summary, cell.summary) : '两条线路尚未完整测量，暂不下线路优劣结论。'}</p>}
+  </section>;
+}
 export function SampleChart({ samples, mode = 'tcp', onSelect }: { samples: Sample[]; mode?: string; onSelect?: (s: Sample) => void }) {
   if (!samples.length) return <div className="chart-empty"><div className="grid-lines" /><div><Icon name="activity" size={30} /><p>真实采样将在这里呈现</p><span>开始测试后，查看每一次连接的变化</span></div></div>;
   const data = samples.map(s => ({ sequence: s.sequence, success: s.status === 'success' ? s.durationMs : null,
     // Failure marker is on a zero baseline; it is never used as a latency value.
-    failure: s.status === 'success' ? null : 0, sample: s }));
-  return <div className="chart" role="img" aria-label={`${mode === 'tcp' ? 'TCP 连接' : 'HTTPS 总'}耗时图，失败点在基线显示`}>
+    failure: s.status === 'success' ? null : 0,
+    https: s.https?.status === 'success' ? s.https.durationMs : null,
+    httpsFailure: s.https && s.https.status !== 'success' ? 0 : null, sample: s }));
+  return <div className="chart" role="img" aria-label={`${mode === 'combined' ? 'TCP 与 HTTPS' : mode === 'tcp' ? 'TCP 连接' : 'HTTPS 总'}耗时图，失败点在基线显示`}>
     <ResponsiveContainer width="100%" height="100%"><LineChart data={data} margin={{ top: 12, right: 8, left: -12, bottom: 0 }}>
       <CartesianGrid strokeDasharray="3 5" vertical={false} stroke="var(--border)" />
       <XAxis dataKey="sequence" tickLine={false} axisLine={false} tick={{ fontSize: 13, fill: 'var(--muted)' }} minTickGap={24} />
@@ -48,17 +69,23 @@ export function SampleChart({ samples, mode = 'tcp', onSelect }: { samples: Samp
       <Tooltip content={({ active, payload }) => {
         if (!active || !payload?.length) return null;
         const s: Sample = payload[0].payload.sample;
-        return <div className="chart-tooltip"><b>第 {s.sequence} 次 · {s.status === 'success' ? `${formatMs(s.durationMs)} ms` : s.status === 'cancelled' ? '已取消' : '连接失败'}</b><p>{interfaceNames[s.interface]}{s.error && ` · ${s.error}`}</p><button onClick={() => onSelect?.(s)}>查看采样详情</button></div>;
+        return <div className="chart-tooltip"><b>第 {s.sequence} 次 · {s.status === 'success' ? `${formatMs(s.durationMs)} ms` : s.status === 'cancelled' ? '已取消' : '连接失败'}</b>{mode === 'combined' && <p>HTTPS：{s.https?.status === 'success' ? `${formatMs(s.https.durationMs)} ms` : s.https ? ({failed:'失败',timeout:'超时',cancelled:'取消'})[s.https.status] : '尚未执行'}</p>}<p>{interfaceNames[s.interface]}{s.error && ` · ${s.error}`}</p><button onClick={() => onSelect?.(s)}>查看采样详情</button></div>;
       }} />
       <Line type="linear" dataKey="success" stroke="var(--accent)" strokeWidth={2.3} connectNulls={false}
         dot={{ r: 3, fill: 'var(--card)', strokeWidth: 2 }} activeDot={{ r: 6, onClick: (_event: unknown, point: unknown) => {
           const s = (point as { payload?: { sample?: Sample } }).payload?.sample; if (s) onSelect?.(s);
         } }} isAnimationActive={false} />
       <Line dataKey="failure" stroke="var(--red)" strokeWidth={0} dot={{ r: 4, fill: 'var(--red)' }} isAnimationActive={false} />
+      {mode === 'combined' && <Line type="linear" dataKey="https" stroke="var(--green)" strokeWidth={2.3} connectNulls={false} dot={{ r: 3, fill: 'var(--card)', strokeWidth: 2 }} isAnimationActive={false} />}
+      {mode === 'combined' && <Line dataKey="httpsFailure" stroke="var(--red)" strokeWidth={0} dot={{ r: 5, fill: 'var(--card)', stroke: 'var(--red)', strokeWidth: 2 }} isAnimationActive={false} />}
     </LineChart></ResponsiveContainer>
   </div>;
 }
 export function SampleDetails({ sample }: { sample: Sample }) {
+  if (sample.https) {
+    const { https, ...tcp } = sample;
+    return <div className="combined-detail"><h3>TCP 建连结果</h3><SampleDetails sample={tcp} /><h3>HTTPS 性能结果</h3><SampleDetails sample={{ ...https, sequence: sample.sequence, at: sample.at }} /></div>;
+  }
   return <div className="sample-detail"><div className="detail-grid"><span>状态</span><b>{({ success: '成功', failed: '失败', timeout: '超时', cancelled: '取消' })[sample.status]}</b>
     <span>耗时</span><b>{formatMs(sample.durationMs)}{sample.durationMs != null && ' ms'}</b>
     <span>等待总耗时</span><b>{formatMs(sample.elapsedMs)} ms</b><span>连接路径</span><b>{interfaceNames[sample.interface]}</b>

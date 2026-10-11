@@ -1,5 +1,7 @@
 export type Interface = 'wifi' | 'cellular' | 'wired' | 'other' | 'none';
-export type Mode = 'tcp' | 'https';
+export type ProbeMode = 'tcp' | 'https';
+export type Mode = ProbeMode | 'combined';
+export const modeNames: Record<Mode, string> = { tcp: 'TCP', https: 'HTTPS', combined: 'TCP + HTTPS' };
 export type LineLabel = 'auto' | 'wifi' | '5g';
 export interface Target { id: string; name: string; host: string; port: number; builtin?: boolean }
 export interface Parameters { count: number; interval: number; timeout: number }
@@ -15,16 +17,22 @@ export interface ProbeResult {
   observedInterface?: Interface; dnsIncluded: boolean; error?: string;
   statusCode?: number; redirects?: number; metrics?: HTTPMetrics[];
 }
-export interface Sample extends ProbeResult { sequence: number; at: string }
+export interface Sample extends ProbeResult { sequence: number; at: string; https?: ProbeResult }
 export interface Summary {
   success: number; failed: number; cancelled: number; failureRate: number | null;
   mean: number | null; min: number | null; max: number | null;
   p50: number | null; p95: number | null; p99: number | null; stddev: number | null;
 }
+export type TestScope = 'current' | 'both';
+export interface NetworkRound {
+  interface: Interface; startedAt: string; endedAt: string; samples: Sample[];
+  summary: Summary; httpsSummary: Summary; completion: 'complete' | 'stopped' | 'interrupted';
+}
 export interface RecordEntry {
   id: string; name?: string; startedAt: string; endedAt: string; target: Target; mode: Mode;
   parameters: Parameters; label: LineLabel; actualInterfaces: Interface[];
-  samples: Sample[]; summary: Summary; completion: 'complete' | 'stopped' | 'interrupted';
+  samples: Sample[]; summary: Summary; httpsSummary?: Summary; completion: 'complete' | 'stopped' | 'interrupted';
+  scope?: TestScope; rounds?: NetworkRound[];
 }
 export interface NetworkStatus { available: boolean; interface: Interface; expensive?: boolean; constrained?: boolean }
 export interface Settings { theme: 'system' | 'light' | 'dark'; parameters: Parameters }

@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { actualInterfaces, comparable, comparisonConclusion, lineMatches, summarize } from './statistics';
+import { actualInterfaces, comparable, comparisonConclusion, lineMatches, summarize, summarizeHTTPS } from './statistics';
 import { defaults, type RecordEntry, type Sample } from './types';
 const sample = (v: number, i: number): Sample => ({ sequence: i + 1, at: '2026-10-11T00:00:00Z', status: 'success', durationMs: v, elapsedMs: v, interface: 'wifi', dnsIncluded: true });
 const record = (values: Sample[]): RecordEntry => ({ id: 'test', target: { id: 'target', name: '目标', host: 'www.apple.com.cn', port: 443 }, startedAt: '2026-10-11T00:00:00Z', endedAt: '2026-10-11T00:00:10Z', mode: 'tcp', parameters: defaults, label: 'auto', actualInterfaces: actualInterfaces(values), samples: values, summary: summarize(values), completion: 'complete' });
 describe('统计定义', () => {
+  it('两项延迟及失败率分别计算，网络切换证据不能忽略 HTTPS 路径', () => {
+    const values = [{...sample(10, 0), https: {...sample(80, 0), interface: 'cellular' as const}}, {...sample(20, 1), https: {...sample(0, 1), status: 'timeout' as const, durationMs: undefined}}];
+    expect(summarize(values).mean).toBe(15); expect(summarizeHTTPS(values)).toMatchObject({mean: 80, failureRate: .5});
+    expect(actualInterfaces(values)).toEqual(['wifi', 'cellular']);
+  });
   it('空样本不伪造零延迟或零失败率', () => { expect(summarize([])).toMatchObject({ mean: null, p95: null, stddev: null, failureRate: null, success: 0 }); });
   it('正确计算最近秩百分位和总体标准差', () => {
     const s = summarize([10, 20, 30, 40].map(sample));
