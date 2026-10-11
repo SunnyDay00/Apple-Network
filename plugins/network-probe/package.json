@@ -1,0 +1,10 @@
+{
+  "name": "@apple-network/network-probe",
+  "version": "1.0.0",
+  "description": "Real iOS TCP and HTTPS measurements",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "files": ["ios/", "Package.swift", "index.js", "index.d.ts"],
+  "capacitor": { "ios": { "src": "ios" } },
+  "peerDependencies": { "@capacitor/core": "8.5.3" }
+}

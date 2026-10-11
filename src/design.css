@@ -1,0 +1,202 @@
+/* Color, readable mobile typography and glass navigation for the iPhone UI. */
+:root {
+  --bg: #f4f7fc; --text: #233044; --muted: #65768b; --border: #e1eaf3;
+  --accent: #1976ee; --accent-soft: #eaf3ff; --green: #178c76; --red: #c84661;
+  --input: #f1f5fa; --shadow: 0 8px 32px #24466f08, 0 1px 3px #24466f03;
+  --glass: #ffffffb8; --glass-border: #ffffffee;
+  --glass-shadow: 0 12px 40px #234e7c17, inset 0 1px 1px #fffffff5;
+  --nav-fill: #ffffff45; --nav-sheen: #ffffff88; --nav-edge: #ffffffe6;
+  --nav-reflection: #ffffff99; --nav-shadow: #173b6a26; --nav-text-halo: #ffffffc9;
+  -webkit-text-size-adjust: 100%;
+}
+:root[data-theme="dark"] {
+  --bg: #121b2a; --card: #1c293e; --text: #edf5ff; --muted: #b1c0d4; --border: #32445e;
+  --accent: #80b4ff; --accent-soft: #223d60; --green: #63d9ba; --red: #ff95aa; --input: #23334b;
+  --glass: #20324dc9; --glass-border: #ffffff26;
+  --glass-shadow: 0 12px 40px #00000033, inset 0 1px 1px #ffffff12;
+  --nav-fill: #172c4b70; --nav-sheen: #d9eaff26; --nav-edge: #d9eaff59;
+  --nav-reflection: #afcfff33; --nav-shadow: #00000066; --nav-text-halo: #111d3399;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121b2a; --card: #1c293e; --text: #edf5ff; --muted: #b1c0d4; --border: #32445e;
+    --accent: #80b4ff; --accent-soft: #223d60; --green: #63d9ba; --red: #ff95aa; --input: #23334b;
+    --glass: #20324dc9; --glass-border: #ffffff26;
+    --glass-shadow: 0 12px 40px #00000033, inset 0 1px 1px #ffffff12;
+    --nav-fill: #172c4b70; --nav-sheen: #d9eaff26; --nav-edge: #d9eaff59;
+    --nav-reflection: #afcfff33; --nav-shadow: #00000066; --nav-text-halo: #111d3399;
+  }
+}
+body {
+  font-size: 16px;
+  background: radial-gradient(ellipse at 95% 0%, #83b9ff2b, transparent 40%),
+    radial-gradient(ellipse at 5% 25%, #6ddcc81c, transparent 38%),
+    radial-gradient(ellipse at 80% 90%, #ffcda125, transparent 40%), var(--bg);
+  background-attachment: fixed;
+}
+button { -webkit-tap-highlight-color: transparent; }
+.sidebar { background: var(--glass); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+.sidebar nav button { padding: 16px 14px; border-radius: 15px; }
+.brand-icon { background: linear-gradient(145deg, #55adff, #1265df); border-radius: 16px; box-shadow: 0 5px 14px #2275d629, inset 0 1px 0 #ffffff52; }
+.brand b { font-size: 16px; }
+.brand span { font-size: 9px; letter-spacing: .6px; }
+.eyebrow { font-size: 11px; letter-spacing: 1.5px; color: var(--accent); }
+.environment-badge { border-radius: 22px; background: var(--glass); border-color: var(--glass-border); padding: 9px 13px; font-size: 13px; }
+.preview-banner { border-radius: 19px; background: color-mix(in srgb, var(--accent-soft) 70%, var(--card)); border-color: color-mix(in srgb, var(--accent) 14%, transparent); padding: 16px; }
+.banner-icon { width: 38px; height: 38px; border-radius: 13px; }
+.preview-banner p { line-height: 1.7; }
+.preview-tag { border-radius: 18px; background: var(--card); font-size: 12px; }
+.network-strip { padding: 15px 17px; margin: 0 0 22px; border-radius: 22px; background: var(--glass); border: 1px solid var(--glass-border); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); box-shadow: 0 4px 20px #31345805; }
+.network-symbol { color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--card)); border: none; border-radius: 14px; }
+.status-pill { background: var(--input); border: 0; padding: 7px 10px; }
+.status-pill.good { background: color-mix(in srgb, var(--green) 10%, var(--card)); }
+.card { border-radius: 24px; border-color: color-mix(in srgb, var(--border) 65%, var(--card)); padding: 24px; margin-bottom: 21px; }
+.measurement { background: radial-gradient(ellipse at 88% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 45%), var(--card); }
+.protocol-chip { color: var(--accent); background: var(--accent-soft); border-radius: 20px; letter-spacing: 0; padding: 6px 10px; }
+.big-number { font-size: 82px; padding-top: 24px; letter-spacing: -4px; }
+.big-number span { font-size: 24px; }
+.measurement-label { font-size: 15px; margin-top: 10px; }
+.target-inline { margin: 17px 0 25px; font-size: 14px; }
+.progress-track { height: 5px; margin-top: 12px; }
+.progress-track div { background: linear-gradient(90deg, #2187f5, #63c8ca); }
+.chart-empty { height: 175px; }
+.chart-empty svg { color: var(--accent); }
+.chart-empty span { opacity: 1; }
+.primary { background: linear-gradient(120deg, #258cfa, #1464df); border-radius: 15px; box-shadow: 0 5px 14px #246fce1a, inset 0 1px 1px #ffffff26; }
+.primary:disabled { background: color-mix(in srgb, var(--accent) 14%, var(--card)); color: var(--accent); opacity: 1; box-shadow: none; }
+.start-button { min-height: 53px; }
+.secondary, input, select { border-radius: 12px; }
+input, select { min-height: 46px; }
+.segmented { border-radius: 15px; padding: 5px; }
+.segmented button { border-radius: 11px; padding: 11px 3px; }
+.text-button { min-height: 32px; }
+.hint { line-height: 1.8; }
+.reading-icon { border-radius: 13px; padding: 10px; height: 39px; }
+.reading-note { gap: 12px; }
+.comparison-icons span { width: 72px; height: 72px; border-radius: 25px; background: var(--glass); border-color: var(--glass-border); box-shadow: var(--glass-shadow); }
+.empty-icon { width: 76px; height: 76px; border-radius: 26px; background: linear-gradient(135deg, var(--accent-soft), color-mix(in srgb, var(--green) 8%, var(--card))); }
+.empty { padding-top: 50px; padding-bottom: 50px; }
+.record-icon { border-radius: 16px; }
+.record-value strong { font-size: 28px; }
+.history-sort select { width: 145px; }
+.fastest-summary { border-radius: 19px; padding: 18px; }
+.fastest-badge { border-radius: 8px; padding: 4px 7px; }
+.naming-modal { border-radius: 30px; padding: 28px; border-color: var(--glass-border); }
+.modal-backdrop { backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.notice { border-radius: 16px; font-size: 14px; padding: 16px; }
+@media (max-width: 1200px) { .stats-grid { gap: 25px 15px; } }
+@media (max-width: 900px) {
+  main { padding-top: calc(27px + env(safe-area-inset-top)); padding-bottom: calc(130px + env(safe-area-inset-bottom)); }
+  .bottom-tabs {
+    bottom: calc(14px + env(safe-area-inset-bottom)); left: 18px; right: 18px; max-width: 550px; margin: auto;
+    border-radius: 44px; padding: 8px; min-height: 78px; gap: 3px;
+    background: radial-gradient(ellipse at 12% 0%, var(--nav-sheen), transparent 58%),
+      radial-gradient(ellipse at 94% 100%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+      linear-gradient(135deg, var(--nav-fill), color-mix(in srgb, var(--nav-fill) 65%, transparent));
+    backdrop-filter: blur(18px) saturate(230%) brightness(1.06);
+    -webkit-backdrop-filter: blur(18px) saturate(230%) brightness(1.06);
+    border: 1px solid var(--nav-edge);
+    box-shadow: 0 12px 38px var(--nav-shadow), 0 3px 10px color-mix(in srgb, var(--nav-shadow) 50%, transparent),
+      inset 0 2px 2px var(--nav-edge), inset 0 -2px 3px var(--nav-reflection);
+    isolation: isolate;
+  }
+  .bottom-tabs::before {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(175deg, var(--nav-sheen), transparent 38%, transparent 65%, var(--nav-reflection));
+    box-shadow: inset 2px 0 3px var(--nav-reflection), inset -2px 0 3px var(--nav-reflection);
+  }
+  .bottom-tabs::after {
+    content: ""; position: absolute; inset: 3px; border-radius: inherit; pointer-events: none;
+    border-top: 1px solid var(--nav-edge); border-bottom: 1px solid var(--nav-reflection);
+    opacity: .7;
+  }
+  .bottom-tabs button { position: relative; z-index: 1; border-radius: 32px; font-size: 13px; padding: 8px 3px; justify-content: center; min-width: 0; gap: 5px; color: var(--text); text-shadow: 0 1px 3px var(--nav-text-halo); }
+  .bottom-tabs button svg { width: 25px; height: 25px; }
+  .bottom-tabs button.active {
+    background: linear-gradient(140deg, color-mix(in srgb, var(--accent-soft) 55%, transparent), color-mix(in srgb, var(--accent) 14%, transparent));
+    box-shadow: inset 0 1px 2px var(--nav-edge), inset 0 -1px 2px var(--nav-reflection), 0 2px 8px #2474d612;
+    color: var(--accent); font-weight: 650;
+  }
+}
+@media (max-width: 640px) {
+  .page-header { align-items: start; margin-bottom: 23px; }
+  h1 { font-size: 32px; }
+  .page-header p { font-size: 15px; line-height: 1.6; margin-top: 9px; }
+  .environment-badge { font-size: 12px; margin-top: 27px; padding: 8px 10px; gap: 5px; }
+  .preview-banner { padding: 14px; margin-bottom: 18px; }
+  .preview-banner b { font-size: 15px; }
+  .preview-banner p { font-size: 13px; }
+  .network-strip { padding: 14px; margin-bottom: 19px; gap: 11px; }
+  .network-strip > div:nth-child(2) span { font-size: 13px; }
+  .network-strip b { font-size: 15px; }
+  .status-pill { font-size: 12px; padding: 7px 9px; }
+  .card { padding: 21px; border-radius: 25px; margin-bottom: 19px; }
+  .card-heading > span:first-child { font-size: 14px; }
+  .protocol-chip { font-size: 12px; }
+  .chart-empty { height: 155px; }
+  .chart-empty p { font-size: 14px; }
+  .chart-empty span { font-size: 13px; line-height: 1.6; }
+  .chart-heading b { font-size: 16px; }
+  .chart-heading span { font-size: 12px; }
+  .chart-caption { font-size: 12px; flex-wrap: wrap; gap: 5px; }
+  .progress-line { font-size: 13px; }
+  .section-title { margin-bottom: 22px; }
+  .section-title h2 { font-size: 19px; }
+  .section-title > span { font-size: 12px; max-width: 145px; text-align: right; line-height: 1.5; }
+  .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; }
+  .stats-grid div { padding: 17px 8px; border-bottom: 1px solid var(--border); }
+  .stats-grid div:nth-child(odd) { padding-left: 0; border-right: 1px solid var(--border); }
+  .stats-grid div:nth-child(even) { padding-left: 20px; }
+  .stats-grid div:nth-last-child(-n+2) { border-bottom: 0; }
+  .stats-grid div span { font-size: 14px; }
+  .stats-grid strong { font-size: 23px; }
+  .stats-grid small { display: inline; font-size: 13px; }
+  .counts { gap: 8px; font-size: 13px; padding-top: 19px; margin-top: 14px; }
+  .counts b { font-size: 15px; }
+  .field > span { font-size: 14px; }
+  input, select { font-size: 16px; min-height: 49px; padding: 12px; border-radius: 13px; }
+  .segmented { border-radius: 17px; margin-bottom: 25px; }
+  .segmented button { font-size: 16px; border-radius: 13px; }
+  .host-label, .mono { font-size: 14px; }
+  .hint, .reading-note p, .sample-detail > p { font-size: 14px; line-height: 1.75; }
+  .start-button { font-size: 17px; min-height: 54px; border-radius: 17px; }
+  .privacy-note { font-size: 13px; flex-wrap: wrap; }
+  .text-button { font-size: 14px; min-height: 35px; }
+  .reading-note b { font-size: 15px; }
+  .page-footnote { font-size: 13px; text-align: left; }
+  .comparison-row { font-size: 14px; gap: 8px; }
+  .analysis-intro h2 { font-size: 24px; }
+  .analysis-intro p { font-size: 15px; }
+  .empty h3 { font-size: 19px; }
+  .empty p { font-size: 15px; }
+  .record-value strong { font-size: 25px; }
+  .history-record b { font-size: 16px; }
+  .history-record p { font-size: 13px; }
+  .history-record small { font-size: 12px; }
+  .fastest-badge { font-size: 12px; margin-top: 7px; }
+  .record-metrics { grid-template-columns: repeat(2, 1fr); gap: 19px 12px; font-size: 13px; }
+  .record-metrics b { font-size: 17px; }
+  .record-footer { font-size: 13px; }
+  .history-sort select { width: 138px; font-size: 15px; }
+  .settings-actions button { font-size: 16px; padding: 19px 0; }
+  .detail-grid { font-size: 14px; }
+  .desktop-footer { flex-direction: column; align-items: center; font-size: 12px; gap: 10px; }
+}
+@media (max-width: 374px) {
+  main { padding-left: 14px; padding-right: 14px; }
+  .page-header { flex-wrap: wrap; gap: 10px; }
+  .environment-badge { margin-top: 0; }
+  .network-strip { flex-wrap: wrap; }
+  .status-pill { margin-left: 53px; }
+  .chart-heading, .history-sort { flex-wrap: wrap; }
+  .bottom-tabs { left: 12px; right: 12px; }
+  .bottom-tabs button { font-size: 12px; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .bottom-tabs, .network-strip, .sidebar, .environment-badge { background: var(--card); backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .bottom-tabs::before, .bottom-tabs::after { display: none; }
+}
+
+/* Hide scroll indicators on every page and nested panel without disabling scrolling. */
+* { scrollbar-width: none; -ms-overflow-style: none; }
+*::-webkit-scrollbar { display: none; width: 0; height: 0; }

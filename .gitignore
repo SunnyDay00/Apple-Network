@@ -1,0 +1,17 @@
+node_modules/
+dist/
+ios/
+build/
+artifacts/
+*.ipa
+*.p12
+*.mobileprovision
+.env*
+!.env.example
+.DS_Store
+native-core/.build/
+native-core/.swiftpm/
+plugins/network-probe/.build/
+plugins/network-probe/.swiftpm/
+*.xcuserstate
+*.log

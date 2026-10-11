@@ -1,0 +1,40 @@
+{
+  "name": "apple-network-probe",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "npm run typecheck && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "ios:prepare": "npm run build && node scripts/prepare-ios.mjs"
+  },
+  "dependencies": {
+    "@apple-network/network-probe": "file:plugins/network-probe",
+    "@capacitor/core": "8.5.3",
+    "@capacitor/filesystem": "8.1.4",
+    "@capacitor/ios": "8.5.3",
+    "@capacitor/preferences": "8.0.1",
+    "@capacitor/share": "8.0.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "recharts": "3.10.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.5.3",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/node": "26.6.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "tailwindcss": "4.3.3",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.3"
+  }
+}
