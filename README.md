@@ -139,6 +139,8 @@ JSON 格式版本为 1，导入校验结构、端口、时间、状态和数值�
 
 ## 验证边界
 
+2026-10-11 的 [GitHub Actions 真机构建](https://github.com/SunnyDay00/Apple-Network/actions/runs/38136230546)已成功：23 项前端测试、原生核心测试、Swift 插件编译及最终注册检查通过，已生成未签名 IPA 与 .app 包。此结果不包含证书签名、实体 iPhone 安装或 Apple 目标的真机网络验收。
+
 前端包含统计、比较、排序、导入校验、CSV 和调度取消的自动化单元测试。原生核心包含真实本机 TCP 连接及确定性的状态注入测试；注入只存在于 XCTest，不用于 App。
 
 实体 iPhone 验收步骤见 [`docs/device-tests.md`](docs/device-tests.md)。在实体 iPhone 上仍需验证：安装与签名、插件 Bridge 实际调用、Apple 目标连接、DNS 失败与拒绝连接、超时、取消、Wi-Fi / 蜂窝切换、退后台、HTTPS 各项指标、导出分享与重启数据恢复。CI 本机回环测试和编译通过**不能替代**这些真机测试。
