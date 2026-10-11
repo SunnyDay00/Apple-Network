@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { comparisonConclusion, formatMs } from './statistics';
+import { averageComparison, comparisonConclusion, formatMs } from './statistics';
 import { interfaceNames, type NetworkRound, type Sample, type Summary } from './types';
 
 export function Icon({ name, size = 22 }: { name: string; size?: number }) {
@@ -28,20 +28,26 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
 export function Empty({ icon, title, text }: { icon: string; title: string; text: string }) {
   return <div className="empty"><div className="empty-icon"><Icon name={icon} size={32} /></div><h3>{title}</h3><p>{text}</p></div>;
 }
+export function MeasurementValue({ value, label, status }: { value: number | null | undefined; label: string; status: string }) {
+  const text = value == null ? '—' : formatMs(value);
+  return <div className="reading-slot">
+    <div className="big-number" title={value == null ? `${label}：不可用` : `${label}：${text} ms`}>
+      <span className="reading-value">{text}</span><span className="reading-unit">ms</span>
+    </div>
+    <div className="measurement-label">{label}</div><p title={status}>{status}</p>
+  </div>;
+}
 export function Stats({ summary }: { summary: Summary }) {
   const numbers = [['平均耗时', summary.mean], ['最低耗时', summary.min], ['最高耗时', summary.max],
     ['P50', summary.p50], ['P95', summary.p95], ['P99', summary.p99], ['标准差', summary.stddev]] as const;
-  return <><div className="stats-grid">{numbers.map(([label, value]) => <div key={label}><span>{label}</span><strong>{formatMs(value)}{value != null && <small> ms</small>}</strong></div>)}
-    <div><span>连接失败率</span><strong className={summary.failed ? 'danger-text' : ''}>{summary.failureRate == null ? '不可用' : `${(summary.failureRate * 100).toFixed(1)}%`}</strong></div></div>
+  return <><div className="stats-grid">{numbers.map(([label, value]) => <div key={label}><span>{label}</span><strong className="stat-value" title={value == null ? '不可用' : `${formatMs(value)} ms`}><span className="stat-number">{formatMs(value)}</span><small className={`stat-unit ${value == null ? 'unit-placeholder' : ''}`} aria-hidden={value == null}>ms</small></strong></div>)}
+    <div><span>连接失败率</span><strong className={`stat-value ${summary.failed ? 'danger-text' : ''}`}>{summary.failureRate == null ? '不可用' : `${(summary.failureRate * 100).toFixed(1)}%`}</strong></div></div>
     <div className="counts"><span><i className="dot green" />成功 <b>{summary.success}</b></span><span><i className="dot red" />失败 <b>{summary.failed}</b></span><span>取消 <b>{summary.cancelled}</b></span></div></>;
 }
 export function RoundComparison({rounds, compact = false}: {rounds: NetworkRound[]; compact?: boolean}) {
   const wifi = rounds.find(r => r.interface === 'wifi'), cell = rounds.find(r => r.interface === 'cellular');
   if (!wifi || !cell) return null;
   const complete = wifi.completion === 'complete' && cell.completion === 'complete';
-  const lowest = !complete || wifi.summary.mean === null || cell.summary.mean === null ? null
-    : wifi.summary.mean === cell.summary.mean ? '两条线路 TCP 平均耗时相同'
-    : wifi.summary.mean < cell.summary.mean ? '本组 Wi-Fi 的 TCP 平均耗时较低' : '本组蜂窝网络的 TCP 平均耗时较低';
   return <section className={`round-comparison ${compact ? 'compact' : ''}`}>
     <h3>同一组 Wi-Fi / 蜂窝测量</h3><div className="round-cards">{[wifi, cell].map(round => <div key={round.interface}>
       <b><Icon name={round.interface === 'wifi' ? 'wifi' : 'cellular'} size={18} />{interfaceNames[round.interface]}{round.completion !== 'complete' && ' · 未完成'}</b>
@@ -50,12 +56,12 @@ export function RoundComparison({rounds, compact = false}: {rounds: NetworkRound
       <p>P95 {formatMs(round.summary.p95)} ms · 波动 {formatMs(round.summary.stddev)} ms</p>
       <p>TCP 失败率 {round.summary.failureRate === null ? '不可用' : `${(round.summary.failureRate * 100).toFixed(1)}%`}</p>
     </div>)}</div>
-    {lowest && <p className="round-lowest">{lowest}</p>}
+    <div className="round-conclusions"><p className="round-lowest">{averageComparison('TCP', wifi.summary.mean, cell.summary.mean, complete)}</p><p className="round-lowest">{averageComparison('HTTPS', wifi.httpsSummary.mean, cell.httpsSummary.mean, complete)}</p></div>
     {!compact && <p className="hint">{complete ? comparisonConclusion(wifi.summary, cell.summary) : '两条线路尚未完整测量，暂不下线路优劣结论。'}</p>}
   </section>;
 }
 export function SampleChart({ samples, mode = 'tcp', onSelect }: { samples: Sample[]; mode?: string; onSelect?: (s: Sample) => void }) {
-  if (!samples.length) return <div className="chart-empty"><div className="grid-lines" /><div><Icon name="activity" size={30} /><p>真实采样将在这里呈现</p><span>开始测试后，查看每一次连接的变化</span></div></div>;
+  if (!samples.length) return <div className="chart chart-empty"><div className="grid-lines" /><div><Icon name="activity" size={30} /><p>真实采样将在这里呈现</p><span>开始测试后，查看每一次连接的变化</span></div></div>;
   const data = samples.map(s => ({ sequence: s.sequence, success: s.status === 'success' ? s.durationMs : null,
     // Failure marker is on a zero baseline; it is never used as a latency value.
     failure: s.status === 'success' ? null : 0,

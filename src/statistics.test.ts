@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { actualInterfaces, comparable, comparisonConclusion, lineMatches, summarize, summarizeHTTPS } from './statistics';
+import { actualInterfaces, averageComparison, comparable, comparisonConclusion, lineMatches, summarize, summarizeHTTPS } from './statistics';
 import { defaults, type RecordEntry, type Sample } from './types';
 const sample = (v: number, i: number): Sample => ({ sequence: i + 1, at: '2026-10-11T00:00:00Z', status: 'success', durationMs: v, elapsedMs: v, interface: 'wifi', dnsIncluded: true });
 const record = (values: Sample[]): RecordEntry => ({ id: 'test', target: { id: 'target', name: '目标', host: 'www.apple.com.cn', port: 443 }, startedAt: '2026-10-11T00:00:00Z', endedAt: '2026-10-11T00:00:10Z', mode: 'tcp', parameters: defaults, label: 'auto', actualInterfaces: actualInterfaces(values), samples: values, summary: summarize(values), completion: 'complete' });
 describe('统计定义', () => {
+  it('TCP 与 HTTPS 可以有不同的更低耗时线路', () => {
+    expect(averageComparison('TCP', 10, 20, true)).toContain('Wi-Fi');
+    expect(averageComparison('HTTPS', 90, 40, true)).toContain('蜂窝网络');
+    expect(averageComparison('HTTPS', 40, 40, true)).toContain('相同');
+  });
+  it('没有 HTTPS 有效样本或轮次未完成时，不编造优胜线路', () => {
+    expect(averageComparison('HTTPS', null, 40, true)).toContain('无法比较');
+    expect(averageComparison('HTTPS', 10, 40, false)).toContain('尚未完整');
+  });
   it('两项延迟及失败率分别计算，网络切换证据不能忽略 HTTPS 路径', () => {
     const values = [{...sample(10, 0), https: {...sample(80, 0), interface: 'cellular' as const}}, {...sample(20, 1), https: {...sample(0, 1), status: 'timeout' as const, durationMs: undefined}}];
     expect(summarize(values).mean).toBe(15); expect(summarizeHTTPS(values)).toMatchObject({mean: 80, failureRate: .5});

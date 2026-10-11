@@ -41,4 +41,11 @@ export function comparisonConclusion(a: Summary, b: Summary): string {
     : bBetter ? '本次样本中，蜂窝线路的耗时更低，尾延迟、波动和失败率也未更差。'
     : '两条线路各有优势或差异较小，请结合 P95、波动和失败率选择。';
 }
+export function averageComparison(metric: 'TCP' | 'HTTPS', wifi: number | null, cellular: number | null, complete: boolean): string {
+  const label = metric === 'TCP' ? 'TCP 建连' : 'HTTPS 请求';
+  if (!complete) return `${label}：两条线路尚未完整测量，暂不比较。`;
+  if (wifi === null || cellular === null) return `${label}：有效数据不足，无法比较。`;
+  if (wifi === cellular) return `本组两条线路的 ${label}平均耗时相同。`;
+  return `本组${wifi < cellular ? ' Wi-Fi' : '蜂窝网络'}的 ${label}平均耗时较低。`;
+}
 export function formatMs(value: number | null | undefined) { return value == null ? '不可用' : value.toFixed(1); }

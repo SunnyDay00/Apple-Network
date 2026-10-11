@@ -46,8 +46,6 @@ h1 { font-size: 30px; font-weight: 700; letter-spacing: -.7px; }
 .preview-banner b { font-size: 15px; color: var(--accent); font-weight: 650; }
 .preview-banner p { font-size: 14px; color: var(--muted); margin-top: 5px; line-height: 1.7; }
 .preview-tag { margin-left: auto; font-size: 13px; color: var(--accent); white-space: nowrap; border-radius: 5px; padding: 4px 8px; border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent); }
-.notice { display: flex; justify-content: space-between; gap: 12px; margin: 14px 0; border-radius: 10px; padding: 14px; background: var(--accent-soft); font-size: 15px; line-height: 1.7; }
-.notice button { background: transparent; color: var(--text); align-self: start; }
 .network-strip { display: flex; align-items: center; gap: 12px; margin: 23px 0; }
 .network-symbol { width: 43px; height: 43px; background: var(--card); color: var(--accent); display: grid; place-items: center; border: 1px solid var(--border); border-radius: 12px; }
 .network-strip > div:nth-child(2) span { color: var(--muted); font-size: 13px; display: block; margin-bottom: 5px; }

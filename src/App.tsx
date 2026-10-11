@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import type { PluginListenerHandle } from '@capacitor/core';
-import { Card, Empty, Icon, RoundComparison, SampleChart, SampleDetails, Stats } from './components';
+import { Card, Icon, MeasurementValue, RoundComparison, SampleChart, SampleDetails, Stats } from './components';
 import { NetworkProbe, isNative } from './native';
 import { actualInterfaces, formatMs, summarize, summarizeHTTPS } from './statistics';
 import { builtins, defaults, interfaceNames, modeNames, type Interface, type LineLabel, type NetworkRound, type NetworkStatus, type Parameters, type ProbeMode, type RecordEntry, type Sample, type Settings, type Target, type TestScope } from './types';
@@ -8,7 +8,8 @@ import { readDraft, readHistory, readSettings, readTargets, saveDraft, saveRecor
 import { parseBackup, validateTarget } from './validation';
 import { executeGuidedSession } from './guided';
 import { exportRecords } from './export';
-import { fastestRecord, sortRecords, type SortKey } from './history';
+import { renameHistoryRecord, sortRecords, type SortKey } from './history';
+import Toast from './Toast';
 
 type Tab = 'test' | 'history' | 'settings';
 const tabs = [{ id: 'test', title: '网络测试', icon: 'activity' },
@@ -38,7 +39,14 @@ export default function App() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   const [ready, setReady] = useState(false);
-  const [notice, setNotice] = useState('');
+  const [notice, setNoticeState] = useState<{ id: number; message: string } | null>(null);
+  const noticeSequence = useRef(0);
+  const setNotice = useCallback((message: string) => {
+    setNoticeState(message ? { id: ++noticeSequence.current, message } : null);
+  }, []);
+  const dismissNotice = useCallback((id: number) => {
+    setNoticeState(current => current?.id === id ? null : current);
+  }, []);
   const [pending, setPending] = useState<RecordEntry | null>(null);
   const [naming, setNaming] = useState(false);
   const [recordName, setRecordName] = useState('');
@@ -46,9 +54,10 @@ export default function App() {
   const [editor, setEditor] = useState<Target | null>(null);
   const [selectedSample, setSelectedSample] = useState<Sample | null>(null);
   const [detail, setDetail] = useState<RecordEntry | null>(null);
-  const [filterHost, setFilterHost] = useState('');
-  const [filterNetwork, setFilterNetwork] = useState('all');
-  const [filterDate, setFilterDate] = useState('');
+  const [renameTarget, setRenameTarget] = useState<RecordEntry | null>(null);
+  const [renameName, setRenameName] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [renameError, setRenameError] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('mean');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const controller = useRef<AbortController | null>(null);
@@ -219,10 +228,21 @@ export default function App() {
       setNotice('自定义目标已保存。');
     });
   }
-  const filtered = sortRecords(history.filter(r => (!filterHost || r.target.host.includes(filterHost.toLowerCase())) &&
-    (filterNetwork === 'all' || r.actualInterfaces.includes(filterNetwork as NetworkStatus['interface'])) &&
-    (!filterDate || new Date(r.startedAt).toLocaleDateString('sv-SE') === filterDate)), sortKey, sortOrder);
-  const fastest = fastestRecord(filtered);
+  const sortedHistory = sortRecords(history, sortKey, sortOrder);
+  function openRename(record: RecordEntry) {
+    setRenameTarget(record); setRenameName(record.name ?? record.target.name); setRenameError('');
+  }
+  async function confirmRename(event: FormEvent) {
+    event.preventDefault(); if (!renameTarget || renameSaving) return;
+    setRenameSaving(true); setRenameError('');
+    try {
+      const records = await updateHistory(current => renameHistoryRecord(current, renameTarget.id, renameName));
+      setHistory(records);
+      setDetail(current => current?.id === renameTarget.id ? records.find(r => r.id === current.id) ?? null : current);
+      setRenameTarget(null); setNotice('记录名称已修改。');
+    } catch (error) { setRenameError(message(error)); }
+    finally { setRenameSaving(false); }
+  }
   function chooseTarget(id: string) {
     const t = allTargets.find(t => t.id === id)!;
     setTargetId(id); setPort(t.port);
@@ -235,20 +255,19 @@ export default function App() {
   return <div className="app-shell">
     <aside className="sidebar"><div className="brand"><div className="brand-icon"><Icon name="activity" size={28} /></div><div><b>苹果网络探针</b><span>APPLE NETWORK PROBE</span></div></div>
       <div className="sidebar-label">工作空间</div><nav>{tabs.map(t => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => { setTab(t.id); setDetail(null); setSelectedSample(null); }}><Icon name={t.icon} />{t.title}<span>›</span></button>)}</nav>
-      <div className="sidebar-footer"><Icon name="shield" size={18} /><span>本地存储 · 无需登录</span><small>版本 1.0.0</small></div>
+      <div className="sidebar-footer"><Icon name="shield" size={18} /><span>本地存储 · 无需登录</span><small>版本 2.0</small></div>
     </aside>
     <main aria-label={tabs.find(t => t.id === tab)!.title}>
       {!isNative && <div className="preview-banner"><span className="banner-icon"><Icon name="globe" size={19} /></span><div><b>你正在预览界面</b><p>这里仅预览界面。真实测速与网络识别需要在 iPhone App 内运行。</p></div><span className="preview-tag">预览模式</span></div>}
-      {notice && <div className="notice" role="status"><span>{notice}</span><button aria-label="关闭提示" onClick={() => setNotice('')}><Icon name="close" size={17} /></button></div>}
 
       {tab === 'test' && <>
         <div className="network-strip"><div className="network-symbol"><Icon name={network.interface === 'cellular' ? 'cellular' : 'wifi'} size={24} /></div><div><span>当前网络</span><b>{isNative ? interfaceNames[network.interface] : '安装后识别'}</b></div><span className={`status-pill ${isNative && network.available ? 'good' : ''}`}><i className="dot" />{isNative ? network.available ? '网络可用' : '暂无可用路径' : '等待连接'}</span></div>
-        <div className="test-action-bar"><div><b>TCP + HTTPS 双项测试</b><span>{running ? `${interfaceNames[testingInterface]} · 第 ${progress} 次 · ${phase === 'interval' ? '等待下一次' : `正在测量 ${phase.toUpperCase()}`}` : `${params.count} 次采样 · 每次依次测量两项`}</span></div>{pending ? <button className="primary" onClick={() => beginNaming()}>命名保存</button> : running ? <button className="primary" onClick={() => void stop('stop')}>结束测试</button> : <button className="primary" disabled={!ready || (isNative && !network.available)} onClick={() => void requestStart()}><Icon name="play" size={17} />开始测试</button>}{running && <button className="text-button danger-text" onClick={() => void stop('discard', '用户取消本轮')}>取消本轮</button>}</div>
-        {rounds.length > 1 && <RoundComparison rounds={rounds} />}<div className="test-layout"><div className="test-results">
+        <div className="test-action-bar"><div><b>TCP + HTTPS 双项测试</b><span title={running ? `${interfaceNames[testingInterface]} · 第 ${progress} 次 · ${phase === 'interval' ? '等待下一次' : `正在测量 ${phase.toUpperCase()}`}` : ''}>{running ? `${interfaceNames[testingInterface]} · 第 ${progress} 次 · ${phase === 'interval' ? '等待下一次' : `正在测量 ${phase.toUpperCase()}`}` : `${params.count} 次采样 · 每次依次测量两项`}</span></div>{pending ? <button className="primary" onClick={() => beginNaming()}>命名保存</button> : running ? <button className="primary" onClick={() => void stop('stop')}>结束测试</button> : <button className="primary" disabled={!ready || (isNative && !network.available)} onClick={() => void requestStart()}><Icon name="play" size={17} />开始测试</button>}<button className="text-button danger-text cancel-action" disabled={!running} style={{ visibility: running ? 'visible' : 'hidden' }} onClick={() => void stop('discard', '用户取消本轮')}>取消本轮</button></div>
+        <div className="test-layout"><div className="test-results">
           <Card className="measurement"><div className="card-heading"><span><i className={`dot ${running ? 'green pulse' : ''}`} />{running ? '正在测试' : samples.length ? '本轮测试结果' : '准备就绪'}</span><span className="protocol-chip">TCP + HTTPS</span></div>
-            <div className="dual-readings"><div><div className="big-number">{latest?.status === 'success' ? formatMs(latest.durationMs) : '—'}<span>ms</span></div><div className="measurement-label">TCP 建连耗时</div><p>{latest ? ({success:'成功',failed:'失败',timeout:'超时',cancelled:'取消'})[latest.status] : '等待测试'}</p></div><div><div className="big-number">{latest?.https?.status === 'success' ? formatMs(latest.https.durationMs) : '—'}<span>ms</span></div><div className="measurement-label">HTTPS 请求总耗时</div><p>{latest?.https ? ({success:'成功',failed:'失败',timeout:'超时',cancelled:'取消'})[latest.https.status] : running && phase === 'https' ? '测量中' : '等待测试'}</p></div></div>
+            <div className="dual-readings"><MeasurementValue value={latest?.status === 'success' ? latest.durationMs : null} label="TCP 建连耗时" status={latest ? ({success:'成功',failed:'失败',timeout:'超时',cancelled:'取消'})[latest.status] : '等待测试'} /><MeasurementValue value={latest?.https?.status === 'success' ? latest.https.durationMs : null} label="HTTPS 请求总耗时" status={latest?.https ? ({success:'成功',failed:'失败',timeout:'超时',cancelled:'取消'})[latest.https.status] : running && phase === 'https' ? '测量中' : '等待测试'} /></div>
             <div className="target-inline"><Icon name="globe" size={14} /><span>{target.host}</span><b>:{port}</b></div>
-            <div className="progress-line"><span>{running ? `第 ${progress} / ${params.count} 次 · ${phase === 'interval' ? '间隔等待' : `正在测量 ${phase.toUpperCase()}`}` : latest?.error ?? '每次新建连接，分别测量两项'}</span><span>{completedCount} / {params.count}</span></div><div className="progress-track"><div style={{ width: `${Math.min(completedCount / params.count * 100, 100)}%` }} /></div>
+            <div className="progress-line"><span title={latest?.error}>{running ? `第 ${progress} / ${params.count} 次 · ${phase === 'interval' ? '间隔等待' : `正在测量 ${phase.toUpperCase()}`}` : latest?.error ?? '每次新建连接，分别测量两项'}</span><span>{completedCount} / {params.count}</span></div><div className="progress-track"><div style={{ width: `${Math.min(completedCount / params.count * 100, 100)}%` }} /></div>
             <div className="chart-heading"><b>耗时趋势</b><span><i className="dot" style={{background:'var(--accent)'}} />TCP<i className="dot green" />HTTPS<i className="dot red" />失败</span></div><SampleChart samples={samples} mode={mode} onSelect={setSelectedSample} />
             <div className="chart-caption"><span>横轴：测试序号</span><span>纵轴：毫秒 · 失败点仅显示在基线</span></div>
           </Card>
@@ -272,29 +291,47 @@ export default function App() {
           </Card>
           <div className="reading-note"><div className="reading-icon"><Icon name="activity" size={18} /></div><div><b>看得更全面，选得更稳妥</b><p>除了平均耗时，也留意 P95、波动与连接失败率。测试结果不能预测抢购成功率。</p></div></div>
         </div></div>
+        {!running && rounds.length > 1 && <RoundComparison rounds={rounds} />}
         {editor && <Card className="target-editor"><div className="section-title"><h2>{targets.some(t => t.id === editor.id) ? '编辑目标' : '新增自定义目标'}</h2><button className="text-button" onClick={() => setEditor(null)}>取消</button></div><form onSubmit={e => void saveEditor(e)}><div className="editor-fields"><label className="field"><span>名称</span><input required maxLength={80} value={editor.name} placeholder="例如：我的测试服务器" onChange={e => setEditor({ ...editor, name: e.target.value })} /></label><label className="field"><span>域名或 IP</span><input required value={editor.host} placeholder="example.com 或 IPv6 地址" autoCapitalize="none" autoCorrect="off" onChange={e => setEditor({ ...editor, host: e.target.value })} /></label><label className="field"><span>端口</span><input required type="number" min={1} max={65535} value={Number.isNaN(editor.port) ? '' : editor.port} onChange={e => setEditor({ ...editor, port: e.target.valueAsNumber })} /></label></div><button className="primary small" type="submit">保存目标</button></form></Card>}
         <p className="page-footnote">TCP 建连时间可能包含 DNS 解析；连接失败率不等于 ICMP 丢包率。测量中退后台会中断；手动切换等待阶段会保留结果。</p>
       </>}
 
       {tab === 'history' && <>
-        {detail ? <><div className="section-title"><button className="text-button" onClick={() => { setDetail(null); setSelectedSample(null); }}>‹ 返回历史</button><div className="button-row"><button className="secondary small" onClick={() => void safely(() => exportRecords([detail], 'csv'))}>CSV</button><button className="secondary small" onClick={() => void safely(() => exportRecords([detail], 'json'))}>JSON</button></div></div><Card><h2>{detail.name ?? detail.target.name}</h2><p className="mono">{detail.target.host}:{detail.target.port} · {modeNames[detail.mode]}</p><p className="hint">{time(detail.startedAt)} 至 {time(detail.endedAt)} · {detail.actualInterfaces.map(i => interfaceNames[i]).join(' / ') || '未获得路径'} · 标记：{detail.label === '5g' ? '5G（手动）' : detail.label === 'wifi' ? 'Wi-Fi' : '自动'}</p><p className="hint">{detail.parameters.count} 次 · 间隔 {detail.parameters.interval} 秒 · 超时 {detail.parameters.timeout} 秒 · {detail.completion === 'complete' ? '完整' : '部分 / 中断'}记录</p><h3 className={detail.mode === 'combined' ? 'metrics-subtitle' : 'sr-only'}>TCP 统计</h3>{detail.rounds && detail.rounds.length > 1 && <RoundComparison rounds={detail.rounds} />}<Stats summary={detail.summary} />{detail.httpsSummary && <><h3 className='metrics-subtitle'>HTTPS 统计</h3><Stats summary={detail.httpsSummary} /></>}<SampleChart samples={detail.samples} mode={detail.mode} onSelect={setSelectedSample} /></Card><Card><h2>原始采样</h2><div className="sample-list">{detail.samples.map(s => <button key={s.sequence} onClick={() => setSelectedSample(s)}><span>#{s.sequence}</span><span>{interfaceNames[s.interface]}</span><b className={s.status === 'success' ? '' : 'danger-text'}>{s.status === 'success' ? `${formatMs(s.durationMs)} ms` : ({ failed: '失败', timeout: '超时', cancelled: '取消' })[s.status]}</b><Icon name="arrow" size={15} /></button>)}</div></Card>{selectedSample && <Card><h2>第 {selectedSample.sequence} 次详情</h2><SampleDetails sample={selectedSample} /></Card>}</>
-          : <><Card><div className="section-title"><h2>本机记录 <span className="count-badge">{history.length}</span></h2><div className="button-row"><button className="text-button" onClick={() => void safely(() => exportRecords(filtered, 'csv'))}><Icon name="download" size={15} />CSV</button><button className="text-button" onClick={() => void safely(() => exportRecords(filtered, 'json'))}>JSON</button></div></div><div className="history-filters"><label className="field"><span>域名</span><input placeholder="筛选域名" value={filterHost} onChange={e => setFilterHost(e.target.value)} /></label><label className="field"><span>网络类型</span><select value={filterNetwork} onChange={e => setFilterNetwork(e.target.value)}><option value="all">全部网络</option><option value="wifi">Wi-Fi</option><option value="cellular">蜂窝网络</option><option value="other">其他</option><option value="none">无可用路径</option><option value="wired">有线网络</option></select></label><label className="field"><span>日期</span><input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} /></label></div></Card>
-            <div className="history-sort"><span>{filtered.length} 条记录</span><div><select aria-label="排序指标" value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}><option value="mean">平均耗时</option><option value="min">最低耗时</option><option value="p95">P95 耗时</option><option value="max">最高耗时</option><option value="stddev">延迟波动</option><option value="failureRate">失败率</option><option value="date">测试时间</option></select><button className="secondary small" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>{sortOrder === 'asc' ? '↑ 正序' : '↓ 倒序'}</button></div></div>
-            {fastest && <div className="fastest-summary"><Icon name="check" size={18} /><div><b>当前筛选中平均耗时最低</b><p>{fastest.name ?? fastest.target.name} · {formatMs(fastest.summary.mean)} ms</p></div><span>不同目标与模式的结果仅供参考</span></div>}
-            {!filtered.length ? <Card><Empty icon="history" title={history.length ? '没有符合筛选条件的记录' : '还没有命名保存的测试'} text="每轮测试结束后选择保存，为记录命名后才会出现在这里。记录会直接显示延迟指标，并可按平均耗时、P95、失败率等排序。" /></Card> : <div className="history-list">{filtered.map(r => <Card key={r.id} className={r.id === fastest?.id ? 'fastest-record' : ''}><button className="history-record" onClick={() => { setDetail(r); setSelectedSample(null); }}><div className="record-icon"><Icon name={r.actualInterfaces[0] === 'cellular' ? 'cellular' : 'wifi'} /></div><div><b>{r.name ?? r.target.name}</b>{r.id === fastest?.id && <span className="fastest-badge">平均耗时最低</span>}<p>{r.target.host}:{r.target.port} · {modeNames[r.mode]}</p><small>{time(r.startedAt)} · {r.actualInterfaces.map(i => interfaceNames[i]).join(' / ') || '无采样'}{r.completion !== 'complete' && ' · 部分记录'}</small></div><div className="record-value"><strong>{formatMs(r.summary.mean)}</strong><small>平均 ms</small></div><Icon name="arrow" size={16} /></button>{r.rounds && r.rounds.length > 1 && <RoundComparison rounds={r.rounds} compact />}<div className="record-metrics"><span>最低 <b>{formatMs(r.summary.min)} ms</b></span><span>P95 <b>{formatMs(r.summary.p95)} ms</b></span><span>最高 <b>{formatMs(r.summary.max)} ms</b></span><span>波动 <b>{formatMs(r.summary.stddev)} ms</b></span>{r.httpsSummary && <><span>HTTPS 平均<b>{formatMs(r.httpsSummary.mean)} ms</b></span><span>HTTPS P95<b>{formatMs(r.httpsSummary.p95)} ms</b></span><span>HTTPS 失败率<b>{rate(r.httpsSummary.failureRate)}</b></span></>}</div><div className="record-footer"><span>{r.summary.success} 次成功 · {rate(r.summary.failureRate)} 连接失败率</span><button disabled={running} className="text-button danger-text" onClick={() => void safely(async () => { setHistory(await updateHistory(records => records.filter(item => item.id !== r.id))); })}>删除</button></div></Card>)}</div>}
+        {detail ? <><div className="section-title"><button className="text-button" onClick={() => { setDetail(null); setSelectedSample(null); }}>‹ 返回历史</button><div className="button-row"><button className="secondary small" disabled={running} onClick={() => openRename(detail)}>修改名称</button><button className="secondary small" onClick={() => void safely(() => exportRecords([detail], 'csv'))}>CSV</button><button className="secondary small" onClick={() => void safely(() => exportRecords([detail], 'json'))}>JSON</button></div></div><Card><h2>{detail.name ?? detail.target.name}</h2><p className="mono">{detail.target.host}:{detail.target.port} · {modeNames[detail.mode]}</p><p className="hint">{time(detail.startedAt)} 至 {time(detail.endedAt)} · {detail.actualInterfaces.map(i => interfaceNames[i]).join(' / ') || '未获得路径'} · 标记：{detail.label === '5g' ? '5G（手动）' : detail.label === 'wifi' ? 'Wi-Fi' : '自动'}</p><p className="hint">{detail.parameters.count} 次 · 间隔 {detail.parameters.interval} 秒 · 超时 {detail.parameters.timeout} 秒 · {detail.completion === 'complete' ? '完整' : '部分 / 中断'}记录</p><h3 className={detail.mode === 'combined' ? 'metrics-subtitle' : 'sr-only'}>TCP 统计</h3>{detail.rounds && detail.rounds.length > 1 && <RoundComparison rounds={detail.rounds} />}<Stats summary={detail.summary} />{detail.httpsSummary && <><h3 className='metrics-subtitle'>HTTPS 统计</h3><Stats summary={detail.httpsSummary} /></>}<SampleChart samples={detail.samples} mode={detail.mode} onSelect={setSelectedSample} /></Card><Card><h2>原始采样</h2><div className="sample-list">{detail.samples.map(s => <button key={s.sequence} onClick={() => setSelectedSample(s)}><span>#{s.sequence}</span><span>{interfaceNames[s.interface]}</span><b className={s.status === 'success' ? '' : 'danger-text'}>{s.status === 'success' ? `${formatMs(s.durationMs)} ms` : ({ failed: '失败', timeout: '超时', cancelled: '取消' })[s.status]}</b><Icon name="arrow" size={15} /></button>)}</div></Card>{selectedSample && <Card><h2>第 {selectedSample.sequence} 次详情</h2><SampleDetails sample={selectedSample} /></Card>}</>
+          : <>
+            <div className="history-sort"><span>{sortedHistory.length} 条记录</span><div><select aria-label="排序指标" value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}><option value="mean">平均耗时</option><option value="min">最低耗时</option><option value="p95">P95 耗时</option><option value="max">最高耗时</option><option value="stddev">延迟波动</option><option value="failureRate">失败率</option><option value="date">测试时间</option></select><button className="secondary small" onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}>{sortOrder === 'asc' ? '↑ 正序' : '↓ 倒序'}</button></div></div>
+            {!sortedHistory.length ? <div className="history-empty-line">暂无保存的记录</div> : <div className="history-list">{sortedHistory.map(r => <details className="history-entry" key={r.id}>
+              <summary><span title={r.name ?? r.target.name}>{r.name ?? r.target.name}</span><Icon name="arrow" size={18} /></summary>
+              <div className="history-entry-content">
+                <p className="mono">{r.target.host}:{r.target.port} · {modeNames[r.mode]}</p>
+                <p className="hint">{time(r.startedAt)} · {r.actualInterfaces.map(i => interfaceNames[i]).join(' / ') || '无采样'}{r.completion !== 'complete' && ' · 部分记录'}</p>
+                {r.rounds && r.rounds.length > 1 && <RoundComparison rounds={r.rounds} compact />}
+                <div className="record-metrics"><span>TCP 平均<b>{formatMs(r.summary.mean)} ms</b></span><span>TCP P95<b>{formatMs(r.summary.p95)} ms</b></span><span>TCP 最高<b>{formatMs(r.summary.max)} ms</b></span><span>TCP 波动<b>{formatMs(r.summary.stddev)} ms</b></span>{r.httpsSummary && <><span>HTTPS 平均<b>{formatMs(r.httpsSummary.mean)} ms</b></span><span>HTTPS P95<b>{formatMs(r.httpsSummary.p95)} ms</b></span><span>HTTPS 失败率<b>{rate(r.httpsSummary.failureRate)}</b></span></>}</div>
+                <div className="record-footer"><span>{r.summary.success} 次成功 · {rate(r.summary.failureRate)} TCP 失败率</span></div>
+                <div className="button-row"><button className="text-button" onClick={() => {setDetail(r); setSelectedSample(null);}}>查看采样详情</button><button disabled={running} className="text-button" onClick={() => openRename(r)}>修改名称</button><button disabled={running} className="text-button danger-text" onClick={() => void safely(async () => {setHistory(await updateHistory(records => records.filter(item => item.id !== r.id)));})}>删除记录</button></div>
+              </div>
+            </details>)}</div>}
           </>}
       </>}
 
       {tab === 'settings' && <div className="settings-layout"><div><Card><div className="section-title"><h2>外观</h2><Icon name="settings" size={19} /></div><label className="field horizontal"><span>显示主题</span><select value={settings.theme} onChange={e => setSettings(s => ({ ...s, theme: e.target.value as Settings['theme'] }))}><option value="system">跟随系统</option><option value="light">浅色模式</option><option value="dark">深色模式</option></select></label></Card>
         <Card><h2>数据管理</h2><p className="hint">所有记录保存在本机，无账户或云端同步。删除应用会清除本地数据，请定期导出备份。</p><div className="settings-actions"><button onClick={() => void safely(() => exportRecords(history, 'json'))}><span><Icon name="download" size={18} />导出全部 JSON 备份</span><Icon name="arrow" size={16} /></button><button onClick={() => void safely(() => exportRecords(history, 'csv'))}><span><Icon name="download" size={18} />导出全部 CSV</span><Icon name="arrow" size={16} /></button><button disabled={running || !ready} onClick={() => fileInput.current?.click()}><span><Icon name="history" size={18} />从 JSON 恢复记录</span><Icon name="arrow" size={16} /></button><button disabled={running || !ready} className="danger-text" onClick={() => { if (window.confirm('清空所有历史记录？此操作无法撤销，请先导出备份。')) void safely(async () => { setHistory(await updateHistory(() => [])); setDetail(null); setNotice('历史记录已清空。'); }); }}><span>清空历史记录</span><Icon name="arrow" size={16} /></button></div>
           <input hidden type="file" ref={fileInput} accept=".json,application/json" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; void safely(async () => { if (file.size > 10 * 1024 * 1024) throw new Error('文件不能超过 10 MB。'); const imported = parseBackup(await file.text()); setHistory(await updateHistory(records => [...imported.filter(r => !records.some(old => old.id === r.id)), ...records])); setNotice('导入完成，重复 ID 已跳过。'); }); }} />
-        </Card></div><div><Card className="about-card"><div className="brand-icon"><Icon name="activity" size={35} /></div><h2>苹果网络探针</h2><p>为开售前的线路选择，提供一份真实参考。</p><span className="protocol-chip">版本 1.0.0</span><div className="about-divider" /><div className="detail-grid"><span>TCP 测量</span><b>Network.framework</b><span>HTTPS 测量</span><b>URLSession Metrics</b><span>网络识别</span><b>NWPathMonitor</b><span>记录存储</span><b>本机持久化</b></div></Card>
+        </Card></div><div><Card className="about-card"><div className="brand-icon"><Icon name="activity" size={35} /></div><h2>苹果网络探针</h2><p>为开售前的线路选择，提供一份真实参考。</p><span className="protocol-chip">版本 2.0</span><div className="about-divider" /><div className="detail-grid"><span>TCP 测量</span><b>Network.framework</b><span>HTTPS 测量</span><b>URLSession Metrics</b><span>网络识别</span><b>NWPathMonitor</b><span>记录存储</span><b>本机持久化</b></div></Card>
           <Card><h2>公开目标说明</h2><p className="hint">本工具为独立网络诊断应用，与 Apple 无关联。未找到官方公开的 iPhone 库存或抢购测速 API。Apple Store 是购买硬件的 App；App Store Server API 面向应用内购买。</p><p className="hint">captive.apple.com 的 TCP 443 / 80 来自官方连通性文档，仅作基础网络参考。</p><a className="external-link" href="https://support.apple.com/zh-cn/101555" target="_blank" rel="noreferrer">查看 Apple 官方主机与端口说明 ↗</a></Card>
           <Card><h2>如何理解结果</h2><p className="hint">TCP 总建连耗时可能包含 DNS；HTTPS 显示可用的分项指标。统计采用最近秩百分位和总体标准差，取消采样不计入连接失败率。两条线路建议各采集至少 20 个成功样本。</p><p className="hint">测量中进入后台或网络切换会中断；手动切换等待阶段保留第一轮。系统路径只能识别蜂窝网络，不能据此确认 5G。</p></Card>
         </div></div>}
       <footer className="desktop-footer"><span>Apple Network Probe</span><span><Icon name="shield" size={13} />测量真实连接，数据留在本机</span></footer>
     </main>
     <nav className="bottom-tabs" aria-label="主导航">{tabs.map(t => <button key={t.id} className={tab === t.id ? 'active' : ''} onClick={() => { setTab(t.id); setDetail(null); setSelectedSample(null); }}><Icon name={t.icon} size={23} /><span>{t.title}</span></button>)}</nav>
+    {notice && <Toast key={notice.id} id={notice.id} message={notice.message} onDismiss={dismissNotice} />}
+    {renameTarget && <div className="modal-backdrop"><section className="naming-modal" role="dialog" aria-modal="true" aria-labelledby="rename-title">
+      <div className="section-title"><h2 id="rename-title">修改记录名称</h2><button className="text-button" aria-label="关闭改名窗口" disabled={renameSaving} onClick={() => setRenameTarget(null)}><Icon name="close" size={19} /></button></div>
+      <form onSubmit={e => void confirmRename(e)}><label className="field"><span>记录名称</span><input autoFocus required maxLength={80} value={renameName} onChange={e => setRenameName(e.target.value)} disabled={renameSaving} /></label>
+        {renameError && <p className="modal-error" role="alert">{renameError}</p>}
+        <div className="modal-actions"><button className="secondary" type="button" disabled={renameSaving} onClick={() => setRenameTarget(null)}>取消</button><button className="primary" type="submit" disabled={renameSaving || !renameName.trim()}>{renameSaving ? '保存中…' : '保存名称'}</button></div>
+      </form>
+    </section></div>}
     {scopeDialog && <div className="modal-backdrop"><section className="naming-modal" role="dialog" aria-modal="true" aria-labelledby="scope-title">
       <div className="section-title"><h2 id="scope-title">选择测试范围</h2><button className="text-button" aria-label="关闭选择窗口" onClick={() => setScopeDialog(false)}><Icon name="close" size={19} /></button></div>
       <p className="hint">{isNative ? `当前是${interfaceNames[network.interface]}。${network.interface === 'wifi' ? '是否也测一下蜂窝网络？' : network.interface === 'cellular' ? '是否也测一下 Wi-Fi？' : '双线路测试需要 Wi-Fi 或蜂窝路径。'}` : '浏览器可预览流程；真实测试请在 iPhone App 内执行。'}</p>
@@ -311,7 +348,6 @@ export default function App() {
         <div className="section-title"><h2 id="name-title">{pending.completion === 'complete' ? '测试完成，保存记录' : '测试已结束，保存记录'}</h2><button aria-label="稍后处理" className="text-button" disabled={saving} onClick={() => setNaming(false)}><Icon name="close" size={19} /></button></div>
         <p className="hint">为本轮测试取个名字，确认保存后加入历史记录。</p>
         <div className="save-result-summary"><span>TCP 平均<b>{formatMs(pending.summary.mean)} ms</b></span><span>HTTPS 平均<b>{formatMs(pending.httpsSummary?.mean)} ms</b></span></div>
-        {notice && <p className="modal-error" role="alert">{notice}</p>}
         <form onSubmit={e => void confirmSave(e)}><label className="field"><span>记录名称</span><input autoFocus required maxLength={80} placeholder="例如：家中 Wi-Fi · 开售前" value={recordName} onChange={e => setRecordName(e.target.value)} disabled={saving} /></label>
           <div className="modal-actions"><button type="button" className="secondary" disabled={saving} onClick={() => void safely(async () => { await saveDraft(null); setPending(null); setNaming(false); setNotice('本轮记录未保存。'); })}>不保存</button><button type="submit" className="primary" disabled={saving || !recordName.trim()}>{saving ? '正在保存…' : '命名并保存'}</button></div>
         </form>
